@@ -61,22 +61,17 @@ public:
     {
     }
 
-    std::optional<std::string> remove(int pos)
+    std::string remove(int pos)
     {
-        std::optional<std::string> erased_value = list_.at(pos);
+        std::string erased_value = list_.at(pos);
         const auto it = list_.erase(std::cbegin(list_) + pos);
-        if (it != std::end(list_)) {
-            return erased_value;
-        }
 
-        return std::nullopt;
+        return erased_value;
     }
 
-    void try_emplace_back(std::optional<std::string> maybe_item)
+    void emplace_back(std::string task)
     {
-        if (maybe_item.has_value()) {
-            list_.emplace_back(maybe_item.value());
-        }
+        list_.emplace_back(task);
     }
 
     List GetList() const { return list_; }
@@ -172,7 +167,7 @@ int main()
         "Buy water"
     };
     int todo_current { 0 };
-    int done_current { 1 };
+    int done_current { 0 };
 
     UI ui { std::make_unique<Position>() };
     Cursor cursor { std::make_unique<Position>() };
@@ -236,12 +231,12 @@ int main()
         case (char)10: {
             if (ui.ReturnFocus() == Focus::TODO) {
                 const auto done = todos_manager.remove(todo_current);
-                dones_manager.try_emplace_back(done);
+                dones_manager.emplace_back(done);
             }
 
             if (ui.ReturnFocus() == Focus::DONE) {
                 const auto todo = dones_manager.remove(done_current);
-                todos_manager.try_emplace_back(todo);
+                todos_manager.emplace_back(todo);
             }
         }
         default:
