@@ -1,7 +1,9 @@
 // #include <cstdint>
+// #include <cstdio>
+#include <algorithm>
 #include <cstddef>
-#include <cstdio>
 #include <curses.h>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -14,8 +16,12 @@ constexpr uint8_t ID_TODO = 0;
 constexpr uint8_t ID_DONE = 1;
 
 // @TODO Read/Write from File
-// @TODO [OPT] Move task up/down (give priority) by pressing SHIFT+KEY_UP/DOWN
 // @TODO [OPT] Print information on creation / completion of task
+
+class ListManager;
+
+using CallbackSingleFocus = std::function<void(ListManager&)>;
+using CallbackBothFocus = std::function<void(ListManager&, ListManager&)>;
 
 struct Position {
     int row = 0;
@@ -76,8 +82,19 @@ public:
 
     List GetList() const { return list_; }
 
+    void move_element(size_t to, size_t from, const std::string& task)
+    {
+        list_.erase(std::begin(list_) + from);
+        list_.insert(std::begin(list_) + to, task);
+    }
+
+    void AddCurrent(int n) { current_ += n; }
+    void SetCurrent(int n) { current_ = n; }
+    int GetCurrent() const { return current_; }
+
 private:
     List list_;
+    int current_ { 0 };
 };
 
 class UI {
@@ -140,6 +157,80 @@ private:
     Focus focus_ { Focus::TODO };
 };
 
+class User {
+public:
+    explicit User(CallbackSingleFocus cb)
+        : callback_(std::move(cb))
+    {
+    }
+
+    void invoke(ListManager& lm)
+    {
+        callback_(lm);
+    }
+
+private:
+    CallbackSingleFocus callback_;
+};
+
+class DemandingUser {
+public:
+    explicit DemandingUser(CallbackBothFocus cb)
+        : callback_(std::move(cb))
+    {
+    }
+
+    void invoke(ListManager& todo_lm, ListManager& done_lm)
+    {
+        callback_(todo_lm, done_lm);
+    }
+
+private:
+    CallbackBothFocus callback_;
+};
+
+struct MoveUp {
+    void operator()(ListManager& lm)
+    {
+        lm.AddCurrent(-1);
+        if (lm.GetCurrent() < 0)
+            lm.SetCurrent(lm.GetList().size() - 1);
+    }
+};
+struct MoveDown {
+    void operator()(ListManager& lm)
+    {
+        lm.AddCurrent(1);
+        if (lm.GetCurrent() > lm.GetList().size() - 1)
+            lm.SetCurrent(0);
+    }
+};
+struct MarkDoneTodo {
+    void operator()(ListManager& todo_lm, ListManager& done_lm)
+    {
+        const auto task = todo_lm.remove(todo_lm.GetCurrent());
+        done_lm.emplace_back(task);
+    }
+};
+struct MovePriorityUp {
+    void operator()(ListManager& lm)
+    {
+        if (lm.GetCurrent() - 1 < 0)
+            return;
+        lm.move_element(lm.GetCurrent() - 1, lm.GetCurrent(), lm.GetList().at(lm.GetCurrent()));
+        lm.AddCurrent(-1);
+    }
+};
+struct MovePriorityDown {
+    void operator()(ListManager& lm)
+    {
+        if (lm.GetCurrent() + 1 > lm.GetList().size() - 1)
+            return;
+        lm.move_element(lm.GetCurrent() + 1, lm.GetCurrent(), lm.GetList().at(lm.GetCurrent()));
+        lm.AddCurrent(1);
+    }
+};
+
 int main()
 {
     bool quit = false;
@@ -166,8 +257,6 @@ int main()
         "Run laundry",
         "Buy water"
     };
-    int todo_current { 0 };
-    int done_current { 0 };
 
     UI ui { std::make_unique<Position>() };
     Cursor cursor { std::make_unique<Position>() };
@@ -176,24 +265,22 @@ int main()
 
     while (!quit) {
         clear();
-        // ui.begin()
 
         if (ui.ReturnFocus() == Focus::TODO) {
             ui.label("[TODO] DONE ");
             ui.begin_list(ID_TODO);
             for (auto i = 0; i < todos_manager.GetList().size(); ++i)
-                ui.list_element(todos_manager.GetList().at(i), i, todo_current);
+                ui.list_element(todos_manager.GetList().at(i), i, todos_manager.GetCurrent());
             ui.end_list();
         } else {
             ui.label(" TODO [DONE]");
             ui.begin_list(ID_DONE);
             for (auto i = 0; i < dones_manager.GetList().size(); ++i)
-                ui.list_element(dones_manager.GetList().at(i), i, done_current);
+                ui.list_element(dones_manager.GetList().at(i), i, dones_manager.GetCurrent());
             ui.end_list();
         }
 
         ui.ResetDrawPosition();
-        // ui.end();
 
         refresh();
         char ch = getch();
@@ -203,23 +290,21 @@ int main()
             quit = true;
             break;
         case (char)KEY_UP: {
+            User user(MoveUp {});
             if (ui.ReturnFocus() == Focus::TODO) {
-                if (--todo_current < 0)
-                    todo_current = todos_manager.GetList().size() - 1;
+                user.invoke(todos_manager);
             } else {
-                if (--done_current < 0)
-                    done_current = dones_manager.GetList().size() - 1;
+                user.invoke(dones_manager);
             }
             cursor.Update(-1, 0);
             break;
         }
         case (char)KEY_DOWN: {
+            User user(MoveDown {});
             if (ui.ReturnFocus() == Focus::TODO) {
-                if (++todo_current > todos_manager.GetList().size() - 1)
-                    todo_current = 0;
+                user.invoke(todos_manager);
             } else {
-                if (++done_current > dones_manager.GetList().size() - 1)
-                    done_current = 0;
+                user.invoke(dones_manager);
             }
             cursor.Update(1, 0);
             break;
@@ -229,15 +314,40 @@ int main()
             break;
         }
         case (char)10: {
+            DemandingUser user(MarkDoneTodo {});
             if (ui.ReturnFocus() == Focus::TODO) {
-                const auto done = todos_manager.remove(todo_current);
-                dones_manager.emplace_back(done);
+                user.invoke(todos_manager, dones_manager);
             }
 
             if (ui.ReturnFocus() == Focus::DONE) {
-                const auto todo = dones_manager.remove(done_current);
-                todos_manager.emplace_back(todo);
+                user.invoke(dones_manager, todos_manager);
             }
+        }
+        case 'Q': { // shifted up
+            User user(MovePriorityUp {});
+            if (ui.ReturnFocus() == Focus::TODO) {
+                user.invoke(todos_manager);
+            }
+
+            if (ui.ReturnFocus() == Focus::DONE) {
+                user.invoke(dones_manager);
+            }
+
+            cursor.Update(-1, 0);
+            break;
+        }
+        case 'P': { // shifted down
+            User user(MovePriorityDown {});
+            if (ui.ReturnFocus() == Focus::TODO) {
+                user.invoke(todos_manager);
+            }
+
+            if (ui.ReturnFocus() == Focus::DONE) {
+                user.invoke(dones_manager);
+            }
+
+            cursor.Update(1, 0);
+            break;
         }
         default:
             break;
