@@ -208,14 +208,24 @@ int main()
             quit = true;
             break;
         case (char)KEY_UP: {
-            if (--todo_current < 0)
-                todo_current = todos.size() - 1;
+            if (ui.ReturnFocus() == Focus::TODO) {
+                if (--todo_current < 0)
+                    todo_current = todos_manager.GetList().size() - 1;
+            } else {
+                if (--done_current < 0)
+                    done_current = dones_manager.GetList().size() - 1;
+            }
             cursor.Update(-1, 0);
             break;
         }
         case (char)KEY_DOWN: {
-            if (++todo_current > todos.size() - 1)
-                todo_current = 0;
+            if (ui.ReturnFocus() == Focus::TODO) {
+                if (++todo_current > todos_manager.GetList().size() - 1)
+                    todo_current = 0;
+            } else {
+                if (++done_current > dones_manager.GetList().size() - 1)
+                    done_current = 0;
+            }
             cursor.Update(1, 0);
             break;
         }
