@@ -13,7 +13,6 @@ constexpr uint8_t HIGHLIGTHED = 1;
 constexpr uint8_t ID_TODO = 0;
 constexpr uint8_t ID_DONE = 1;
 
-// @TODO Make items go from TODO to Done and viceversa
 // @TODO Read/Write from File
 // @TODO [OPT] Move task up/down (give priority) by pressing SHIFT+KEY_UP/DOWN
 // @TODO [OPT] Print information on creation / completion of task
@@ -48,9 +47,42 @@ class Window {
     // serve per scollare wrappando
 };
 
-struct ItemList {
-    size_t id;
-    bool focus { false };
+enum class Focus {
+    TODO,
+    DONE
+};
+
+class ListManager {
+    using List = std::vector<std::string>;
+
+public:
+    ListManager(List list)
+        : list_(list)
+    {
+    }
+
+    std::optional<std::string> remove(int pos)
+    {
+        std::optional<std::string> erased_value = list_.at(pos);
+        const auto it = list_.erase(std::cbegin(list_) + pos);
+        if (it != std::end(list_)) {
+            return erased_value;
+        }
+
+        return std::nullopt;
+    }
+
+    void try_emplace_back(std::optional<std::string> maybe_item)
+    {
+        if (maybe_item.has_value()) {
+            list_.emplace_back(maybe_item.value());
+        }
+    }
+
+    List GetList() const { return list_; }
+
+private:
+    List list_;
 };
 
 class UI {
@@ -101,15 +133,16 @@ public:
 
     void SwitchFocus()
     {
-        focus_todo_ = (focus_todo_) ? false : true;
+        focus_ = (focus_ == Focus::TODO) ? Focus::DONE : Focus::TODO;
     }
 
-    bool IsFocusTodo() const { return focus_todo_; }
+    Focus ReturnFocus() const { return focus_; }
 
 private:
     std::unique_ptr<Position> pos_draw;
     std::optional<Id> current_list_;
     bool focus_todo_ { true };
+    Focus focus_ { Focus::TODO };
 };
 
 int main()
@@ -143,22 +176,24 @@ int main()
 
     UI ui { std::make_unique<Position>() };
     Cursor cursor { std::make_unique<Position>() };
+    ListManager todos_manager { todos };
+    ListManager dones_manager { dones };
 
     while (!quit) {
         clear();
         // ui.begin()
 
-        if (ui.IsFocusTodo()) {
+        if (ui.ReturnFocus() == Focus::TODO) {
             ui.label("[TODO] DONE ");
             ui.begin_list(ID_TODO);
-            for (auto i = 0; i < todos.size(); ++i)
-                ui.list_element(todos.at(i), i, todo_current);
+            for (auto i = 0; i < todos_manager.GetList().size(); ++i)
+                ui.list_element(todos_manager.GetList().at(i), i, todo_current);
             ui.end_list();
         } else {
             ui.label(" TODO [DONE]");
             ui.begin_list(ID_DONE);
-            for (auto i = 0; i < dones.size(); ++i)
-                ui.list_element(dones.at(i), i, done_current);
+            for (auto i = 0; i < dones_manager.GetList().size(); ++i)
+                ui.list_element(dones_manager.GetList().at(i), i, done_current);
             ui.end_list();
         }
 
@@ -186,6 +221,18 @@ int main()
         }
         case (char)'\t': {
             ui.SwitchFocus();
+            break;
+        }
+        case (char)10: {
+            if (ui.ReturnFocus() == Focus::TODO) {
+                const auto done = todos_manager.remove(todo_current);
+                dones_manager.try_emplace_back(done);
+            }
+
+            if (ui.ReturnFocus() == Focus::DONE) {
+                const auto todo = dones_manager.remove(done_current);
+                todos_manager.try_emplace_back(todo);
+            }
         }
         default:
             break;
