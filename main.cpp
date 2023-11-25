@@ -14,7 +14,6 @@ constexpr uint8_t ID_TODO = 0;
 constexpr uint8_t ID_DONE = 1;
 
 // @TODO Make items go from TODO to Done and viceversa
-// @TODO Toggle focus TODO/DONE by pressing TAB
 // @TODO Read/Write from File
 // @TODO Print information on creation / completion of task
 
@@ -101,12 +100,15 @@ public:
 
     void SwitchFocus()
     {
-        // if current list is TODO -> DONE else TODO;
+        focus_todo_ = (focus_todo_) ? false : true;
     }
+
+    bool IsFocusTodo() const { return focus_todo_; }
 
 private:
     std::unique_ptr<Position> pos_draw;
     std::optional<Id> current_list_;
+    bool focus_todo_ { true };
 };
 
 int main()
@@ -145,19 +147,19 @@ int main()
         clear();
         // ui.begin()
 
-        ui.label("[TODO] DONE ");
-        ui.begin_list(ID_TODO);
-        for (auto i = 0; i < todos.size(); ++i)
-            ui.list_element(todos.at(i), i, todo_current);
-        ui.end_list();
-
-        ui.label("----------");
-
-        ui.label(" TODO [DONE]");
-        ui.begin_list(ID_DONE);
-        for (auto i = 0; i < dones.size(); ++i)
-            ui.list_element(dones.at(i), i, done_current);
-        ui.end_list();
+        if (ui.IsFocusTodo()) {
+            ui.label("[TODO] DONE ");
+            ui.begin_list(ID_TODO);
+            for (auto i = 0; i < todos.size(); ++i)
+                ui.list_element(todos.at(i), i, todo_current);
+            ui.end_list();
+        } else {
+            ui.label(" TODO [DONE]");
+            ui.begin_list(ID_DONE);
+            for (auto i = 0; i < dones.size(); ++i)
+                ui.list_element(dones.at(i), i, done_current);
+            ui.end_list();
+        }
 
         ui.ResetDrawPosition();
         // ui.end();
