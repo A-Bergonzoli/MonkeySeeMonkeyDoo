@@ -15,7 +15,8 @@ constexpr uint8_t ID_DONE = 1;
 
 // @TODO Make items go from TODO to Done and viceversa
 // @TODO Read/Write from File
-// @TODO Print information on creation / completion of task
+// @TODO [OPT] Move task up/down (give priority) by pressing SHIFT+KEY_UP/DOWN
+// @TODO [OPT] Print information on creation / completion of task
 
 struct Position {
     int row = 0;
