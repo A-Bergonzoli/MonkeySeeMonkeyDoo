@@ -1,10 +1,13 @@
 #include <algorithm>
+#include <cstdio>
 #include <curses.h>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 constexpr uint8_t NORMAL = 0;
@@ -12,7 +15,7 @@ constexpr uint8_t HIGHLIGTHED = 1;
 constexpr uint8_t ID_TODO = 0;
 constexpr uint8_t ID_DONE = 1;
 
-// @TODO Read/Write from File
+// @TODO [OPT] Delete tasks from DONE by pressing 'x'
 // @TODO [OPT] Print information on creation / completion of task
 
 class ListManager;
@@ -61,9 +64,11 @@ class ListManager {
     using List = std::vector<std::string>;
 
 public:
-    ListManager(List list)
-        : list_(list)
+    ListManager(const std::string& file, const std::string& prefix)
+        : file_name_(file)
+        , prefix_(prefix)
     {
+        ReadList(file_name_);
     }
 
     std::string remove(int pos)
@@ -91,9 +96,38 @@ public:
     void SetCurrent(int n) { current_ = n; }
     int GetCurrent() const { return current_; }
 
+    void ReadList(std::string from_location)
+    {
+        std::fstream in_file(from_location, std::ios::in);
+        std::string line;
+
+        if (in_file.is_open()) {
+            while (std::getline(in_file, line)) {
+                if (line.rfind(prefix_, 0) == 0)
+                    list_.emplace_back(line.substr(prefix_.length()));
+            }
+        }
+
+        in_file.close();
+    }
+
+    void SaveList(std::string to_location)
+    {
+        std::fstream out_file(to_location, std::ofstream::app);
+
+        if (out_file.is_open()) {
+            for (const auto& task : list_)
+                out_file << prefix_ + task << "\n";
+        }
+
+        out_file.close();
+    }
+
 private:
     List list_;
     int current_ { 0 };
+    std::string prefix_ {};
+    std::string file_name_ {};
 };
 
 class UI {
@@ -273,7 +307,7 @@ struct AppendNewTask {
         std::string buf {};
         char ch = getch();
 
-        while (ch != (char)27) // ESC
+        while (ch != (char)10) // ESC
         {
             if (ch == (char)KEY_BACKSPACE) {
                 if (!buf.empty())
@@ -293,9 +327,30 @@ struct AppendNewTask {
     }
 };
 
-int main()
+std::string GetRandomName(int len)
 {
+    const std::string extension = ".todo";
+    static const char alphanum[] = "0123456789"
+                                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                   "abcdefghijklmnopqrstuvwxyz";
+    std::string rand_s = "new_";
+
+    for (int i = 0; i < len; ++i)
+        rand_s += alphanum[rand() % (sizeof(alphanum) - 1)];
+
+    return rand_s + extension;
+}
+
+int main(int argc, char* argv[])
+{
+    srand((unsigned)time(NULL) * getpid());
     bool quit = false;
+    std::string file_path {};
+
+    if (argv[1])
+        file_path = argv[1];
+    else
+        file_path = GetRandomName(5);
 
     // init cursors w/ desidered config
     initscr();
@@ -307,22 +362,10 @@ int main()
     init_pair(NORMAL, COLOR_WHITE, COLOR_BLACK);
     init_pair(HIGHLIGTHED, COLOR_BLACK, COLOR_WHITE);
 
-    // coming from user
-    std::vector<std::string> todos = {
-        "Buy bread",
-        "Do the groceries",
-        "Take aspirin"
-    };
-    std::vector<std::string> dones = {
-        "Run diswhasher",
-        "Run laundry",
-        "Buy water"
-    };
-
     UI ui { std::make_unique<Position>() };
     Cursor cursor { std::make_unique<Position>() };
-    ListManager todos_manager { todos };
-    ListManager dones_manager { dones };
+    ListManager todos_manager { file_path, "TODO " };
+    ListManager dones_manager { file_path, "DONE " };
 
     while (!quit) {
         clear();
@@ -348,9 +391,14 @@ int main()
         char ch = getch();
 
         switch (ch) {
-        case 'q':
+        case 'q': {
+            if (std::ifstream(file_path))
+                std::remove(file_path.c_str());
+            todos_manager.SaveList(file_path);
+            dones_manager.SaveList(file_path);
             quit = true;
             break;
+        }
         case (char)KEY_UP: {
             User user(MoveUp {});
             if (ui.ReturnFocus() == Focus::TODO) {
