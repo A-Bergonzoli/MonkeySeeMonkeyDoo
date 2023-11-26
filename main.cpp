@@ -208,8 +208,13 @@ struct MoveDown {
 struct MarkDoneTodo {
     void operator()(ListManager& todo_lm, ListManager& done_lm)
     {
+        if (todo_lm.GetList().empty())
+            return;
+
         const auto task = todo_lm.remove(todo_lm.GetCurrent());
         done_lm.emplace_back(task);
+        if (todo_lm.GetCurrent() - 1 >= 0)
+            todo_lm.AddCurrent(-1);
     }
 };
 struct MovePriorityUp {
@@ -322,6 +327,9 @@ int main()
             if (ui.ReturnFocus() == Focus::DONE) {
                 user.invoke(dones_manager, todos_manager);
             }
+
+            cursor.Update(-1, 0);
+            ui.ResetDrawPosition();
         }
         case 'Q': { // shifted up
             User user(MovePriorityUp {});
