@@ -1,7 +1,4 @@
-// #include <cstdint>
-// #include <cstdio>
 #include <algorithm>
-#include <cstddef>
 #include <curses.h>
 #include <functional>
 #include <iostream>
@@ -19,9 +16,11 @@ constexpr uint8_t ID_DONE = 1;
 // @TODO [OPT] Print information on creation / completion of task
 
 class ListManager;
+class UI;
 
 using CallbackSingleFocus = std::function<void(ListManager&)>;
 using CallbackBothFocus = std::function<void(ListManager&, ListManager&)>;
+using CallbackWithUI = std::function<void(UI&, ListManager&)>;
 
 struct Position {
     int row = 0;
@@ -48,14 +47,14 @@ private:
 };
 
 class Window {
-    // @TODO: imeplemnt
-    // ha un cursor
-    // serve per scollare wrappando
+    // @TODO: implement
+    // scroll up/down wrapping around screen
 };
 
 enum class Focus {
     TODO,
-    DONE
+    DONE,
+    NEW_TASK
 };
 
 class ListManager {
@@ -138,12 +137,27 @@ public:
         pos_draw->Update(1, 0);
     }
 
+    void list_new(const std::string& entry)
+    {
+        curs_set(1);
+        move(1, 0);
+        clrtoeol();
+        attron(COLOR_PAIR(NORMAL));
+        mvaddstr(1, 0, entry.c_str());
+        attroff(COLOR_PAIR(NORMAL));
+    }
+
+    void SwitchFocusTo(Focus focus)
+    {
+        focus_ = focus;
+    }
+
     void ResetDrawPosition()
     {
         pos_draw->Update(-42, -42);
     }
 
-    void SwitchFocus()
+    void ToggleFocusDoneTodo()
     {
         focus_ = (focus_ == Focus::TODO) ? Focus::DONE : Focus::TODO;
     }
@@ -187,6 +201,22 @@ public:
 
 private:
     CallbackBothFocus callback_;
+};
+
+class UIUser {
+public:
+    explicit UIUser(CallbackWithUI cb)
+        : callback_(std::move(cb))
+    {
+    }
+
+    void invoke(UI& ui, ListManager& done_lm)
+    {
+        callback_(ui, done_lm);
+    }
+
+private:
+    CallbackWithUI callback_;
 };
 
 struct MoveUp {
@@ -235,6 +265,33 @@ struct MovePriorityDown {
         lm.AddCurrent(1);
     }
 };
+struct AppendNewTask {
+    void operator()(UI& ui, ListManager& todo_lm)
+    {
+        ui.SwitchFocusTo(Focus::NEW_TASK);
+        ui.label("NEW TASK");
+        std::string buf {};
+        char ch = getch();
+
+        while (ch != (char)27) // ESC
+        {
+            if (ch == (char)KEY_BACKSPACE) {
+                if (!buf.empty())
+                    buf.pop_back();
+            } else {
+                buf += std::string(1, ch);
+            }
+            ui.list_new(buf);
+            ch = getch();
+        }
+
+        todo_lm.AddCurrent(1);
+        todo_lm.emplace_back(buf);
+        refresh();
+        ui.SwitchFocusTo(Focus::TODO);
+        ui.ResetDrawPosition();
+    }
+};
 
 int main()
 {
@@ -244,7 +301,6 @@ int main()
     initscr();
     noecho();
     keypad(stdscr, true);
-    curs_set(0);
 
     // use colors :)
     start_color();
@@ -270,6 +326,7 @@ int main()
 
     while (!quit) {
         clear();
+        curs_set(0);
 
         if (ui.ReturnFocus() == Focus::TODO) {
             ui.label("[TODO] DONE ");
@@ -315,7 +372,7 @@ int main()
             break;
         }
         case (char)'\t': {
-            ui.SwitchFocus();
+            ui.ToggleFocusDoneTodo();
             break;
         }
         case (char)10: {
@@ -353,6 +410,16 @@ int main()
 
             if (ui.ReturnFocus() == Focus::DONE) {
                 user.invoke(dones_manager);
+            }
+
+            cursor.Update(1, 0);
+            break;
+        }
+        case 'i': {
+            UIUser user(AppendNewTask {});
+            if (ui.ReturnFocus() == Focus::TODO) {
+                clear();
+                user.invoke(ui, todos_manager);
             }
 
             cursor.Update(1, 0);
