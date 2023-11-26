@@ -330,6 +330,7 @@ int main()
 
             cursor.Update(-1, 0);
             ui.ResetDrawPosition();
+            break;
         }
         case 'Q': { // shifted up
             User user(MovePriorityUp {});
