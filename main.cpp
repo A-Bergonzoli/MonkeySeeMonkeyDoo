@@ -15,7 +15,6 @@ constexpr uint8_t HIGHLIGTHED = 1;
 constexpr uint8_t ID_TODO = 0;
 constexpr uint8_t ID_DONE = 1;
 
-// @TODO [OPT] Delete tasks from DONE by pressing 'x'
 // @TODO [OPT] Print information on creation / completion of task
 
 class ListManager;
@@ -386,6 +385,15 @@ struct AppendNewTask {
 
     Cursor cursor_ { 1, 0 };
 };
+struct DeleteTask {
+    void operator()(ListManager& lm)
+    {
+        if (lm.GetList().empty())
+            return;
+
+        lm.remove(lm.GetCurrent());
+    }
+};
 
 std::string GetRandomName(int len)
 {
@@ -522,6 +530,14 @@ int main(int argc, char* argv[])
             if (ui.ReturnFocus() == Focus::TODO) {
                 clear();
                 user.invoke(ui, todos_manager);
+            }
+
+            break;
+        }
+        case 'x': {
+            User user(DeleteTask {});
+            if (ui.ReturnFocus() == Focus::DONE) {
+                user.invoke(dones_manager);
             }
 
             break;
