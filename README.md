@@ -12,6 +12,11 @@ or create a new one:
 ./main.o
 ```
 
+## Compile your own binary
+```
+g++ -lncurses main.cpp -o monkey
+```
+
 ## Controls
 | Key  | What |
 | ------------- | ------------- |
@@ -23,6 +28,9 @@ or create a new one:
 | `TAB`  | Change Focus (TODO / DONE)  |
 | `ENTER`  | Move Item into TODO / DONE |
 | `i`  | Insert a new task (`ENTER` when done) |
+| `KEY_LEFT`  | Move cursor left (while inserting new task) |
+| `KEY_RIGHT`  | Move cursor right (while inserting new task) |
+| `x`  | Delete a task (DONE) |
 
 
 ## References
