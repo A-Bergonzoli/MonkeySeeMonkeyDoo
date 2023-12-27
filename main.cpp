@@ -132,10 +132,6 @@ public:
         list_.insert(std::begin(list_) + to, task);
     }
 
-    void AddCurrent(int n) { current_ += n; }
-    void SetCurrent(int n) { current_ = n; }
-    int GetCurrent() const { return current_; }
-
     void ReadList(std::string from_location)
     {
         std::fstream in_file(from_location, std::ios::in);
@@ -162,6 +158,14 @@ public:
 
         out_file.close();
     }
+
+    void AddCurrent(int n) { current_ += n; }
+
+    void ResetCurrent() { current_ = 0; }
+
+    void SetCurrent(int n) { current_ = n; }
+
+    int GetCurrent() const { return current_; }
 
 private:
     List list_;
@@ -376,7 +380,7 @@ struct AppendNewTask {
             ch = getch();
         }
 
-        todo_lm.AddCurrent(1);
+        todo_lm.ResetCurrent();
         todo_lm.emplace_back(buf);
         refresh();
         ui.SwitchFocusTo(Focus::TODO);
