@@ -37,16 +37,57 @@ struct Position {
 };
 
 class Cursor {
+
 public:
-    Cursor(std::unique_ptr<Position> pos_user)
-        : pos_user_(std::move(pos_user))
+    Cursor(int x = 0, int y = 0)
+        : c_x_(x)
+        , c_y_(y)
     {
     }
 
-    void Update(int x, int y) { pos_user_->Update(x, y); }
+    void up()
+    {
+        if (c_x_ > 0)
+            decreaseRow(1);
+    }
+
+    void down(std::size_t max_len)
+    {
+        if (c_x_ <= max_len)
+            increaseRow(1);
+    }
+
+    void left()
+    {
+        if (c_y_ > 0)
+            decreaseCol(1);
+    }
+
+    void right(std::size_t max_len)
+    {
+        if (c_y_ <= max_len)
+            increaseCol(1);
+    }
+
+    void decreaseCol(uint8_t amount) { c_y_ -= amount; }
+
+    void increaseCol(uint8_t amount) { c_y_ += amount; }
+
+    void decreaseRow(uint8_t amount) { c_x_ -= amount; }
+
+    void increaseRow(uint8_t amount) { c_x_ += amount; }
+
+    void resetCol() { c_y_ = 0; }
+
+    void resetRow() { c_x_ = 0; }
+
+    int col() const { return c_y_; }
+
+    int row() const { return c_x_; }
 
 private:
-    std::unique_ptr<Position> pos_user_;
+    int c_x_;
+    int c_y_;
 };
 
 class Window {
@@ -171,7 +212,7 @@ public:
         pos_draw->Update(1, 0);
     }
 
-    void list_new(const std::string& entry)
+    void list_new_element(const std::string& entry)
     {
         curs_set(1);
         move(1, 0);
@@ -309,13 +350,30 @@ struct AppendNewTask {
 
         while (ch != (char)10) // ESC
         {
-            if (ch == (char)KEY_BACKSPACE) {
+            switch (ch) {
+            case (char)KEY_BACKSPACE: {
                 if (!buf.empty())
-                    buf.pop_back();
-            } else {
-                buf += std::string(1, ch);
+                    buf.erase(cursor_.col() - 1, 1);
+                cursor_.left();
+                break;
             }
-            ui.list_new(buf);
+            case (char)KEY_LEFT: {
+                cursor_.left();
+                break;
+            }
+            case (char)KEY_RIGHT: {
+                cursor_.right(buf.length());
+                break;
+            }
+            default:
+                buf.insert(cursor_.col(), std::string(1, ch));
+                cursor_.right(buf.length());
+                break;
+            }
+            ui.list_new_element(buf);
+            move(0, 0);
+            move(cursor_.row(), cursor_.col());
+            refresh();
             ch = getch();
         }
 
@@ -325,6 +383,8 @@ struct AppendNewTask {
         ui.SwitchFocusTo(Focus::TODO);
         ui.ResetDrawPosition();
     }
+
+    Cursor cursor_ { 1, 0 };
 };
 
 std::string GetRandomName(int len)
@@ -363,7 +423,6 @@ int main(int argc, char* argv[])
     init_pair(HIGHLIGTHED, COLOR_BLACK, COLOR_WHITE);
 
     UI ui { std::make_unique<Position>() };
-    Cursor cursor { std::make_unique<Position>() };
     ListManager todos_manager { file_path, "TODO " };
     ListManager dones_manager { file_path, "DONE " };
 
@@ -406,7 +465,6 @@ int main(int argc, char* argv[])
             } else {
                 user.invoke(dones_manager);
             }
-            cursor.Update(-1, 0);
             break;
         }
         case (char)KEY_DOWN: {
@@ -416,7 +474,6 @@ int main(int argc, char* argv[])
             } else {
                 user.invoke(dones_manager);
             }
-            cursor.Update(1, 0);
             break;
         }
         case (char)'\t': {
@@ -433,7 +490,6 @@ int main(int argc, char* argv[])
                 user.invoke(dones_manager, todos_manager);
             }
 
-            cursor.Update(-1, 0);
             ui.ResetDrawPosition();
             break;
         }
@@ -447,7 +503,6 @@ int main(int argc, char* argv[])
                 user.invoke(dones_manager);
             }
 
-            cursor.Update(-1, 0);
             break;
         }
         case 'P': { // shifted down
@@ -460,7 +515,6 @@ int main(int argc, char* argv[])
                 user.invoke(dones_manager);
             }
 
-            cursor.Update(1, 0);
             break;
         }
         case 'i': {
@@ -470,7 +524,6 @@ int main(int argc, char* argv[])
                 user.invoke(ui, todos_manager);
             }
 
-            cursor.Update(1, 0);
             break;
         }
         default:
